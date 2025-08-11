@@ -1,35 +1,28 @@
 name: SMN OpenData Fetcher
 
 on:
-  # Se ejecuta cada hora
   schedule:
-    - cron: '0 * * * *'
-  # También permite la ejecución manual
-  workflow_dispatch:
+    - cron: '0 * * * *' # Se ejecuta cada hora
+  workflow_dispatch: # Permite ejecución manual
 
 jobs:
   fetch-data:
     runs-on: ubuntu-latest
     steps:
-      # 1. Descarga el código de tu repositorio
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # 2. Configura Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
 
-      # 3. Instala la única dependencia necesaria: requests
       - name: Install dependencies
         run: pip install requests
 
-      # 4. Ejecuta el script de Python
       - name: Run data fetcher script
         run: python scraper.py
 
-      # 5. Guarda el archivo .geojson si ha cambiado
       - name: Commit and push if data changed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
