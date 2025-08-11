@@ -1,6 +1,6 @@
 import time
 import json
-import undetected_chromedriver as uc # Importamos la librería especializada
+import undetected_chromedriver as uc
 
 # --- Constantes ---
 LOCATION_ID = "4764"
@@ -8,7 +8,7 @@ OUTPUT_FILENAME = "latest_weather.json"
 
 def get_weather_data_with_undetected_browser():
     """
-    Usa undetected-chromedriver para superar las protecciones de seguridad (ej: Cloudflare).
+    Usa undetected-chromedriver forzando la versión del driver para que coincida con el navegador.
     """
     print("Iniciando navegador con undetected-chromedriver...")
     
@@ -21,26 +21,25 @@ def get_weather_data_with_undetected_browser():
     weather_data = None
     
     try:
-        # Usamos uc.Chrome() en lugar de webdriver.Chrome()
-        driver = uc.Chrome(options=options)
-        print("Driver inicializado. Navegando a la página del SMN...")
+        # --- INICIO DE LA CORRECCIÓN FINAL ---
+        # Le decimos a uc que use el driver para la versión 138 de Chrome
+        driver = uc.Chrome(options=options, version_main=138)
+        # --- FIN DE LA CORRECCIÓN FINAL ---
         
+        print("Driver inicializado. Navegando a la página del SMN...")
         driver.get("https://www.smn.gob.ar/")
         print(f"Navegación completada. Título: '{driver.title}'")
 
-        # Damos tiempo suficiente para pasar la verificación "Just a moment..."
-        print("Esperando 25 segundos para la carga completa y la generación del token...")
+        print("Esperando 25 segundos para la carga y generación del token...")
         time.sleep(25)
         
-        # Obtenemos el token directamente del localStorage
         token = driver.execute_script("return localStorage.getItem('token');")
 
         if not token:
-            raise Exception("No se pudo obtener el token. La página de seguridad podría haber fallado o cambiado.")
+            raise Exception("No se pudo obtener el token.")
         
         print("✅ Token JWT obtenido con éxito.")
         
-        # Usamos el mismo navegador para pedir los datos
         print(f"Pidiendo datos para la locación {LOCATION_ID}...")
         js_script = f"""
             const url = 'https://ws1.smn.gob.ar/v1/weather/location/{LOCATION_ID}';
@@ -77,7 +76,6 @@ def save_data_to_file(data):
     else:
         print("No se recibieron datos para guardar.")
 
-# --- Ejecución Principal ---
 if __name__ == "__main__":
     final_data = get_weather_data_with_undetected_browser()
     if final_data:
