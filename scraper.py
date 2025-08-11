@@ -15,17 +15,21 @@ def fetch_and_process_data():
     current_date_str = datetime.now().strftime('%Y%m%d')
     data_url = DATA_URL_TEMPLATE.format(date=current_date_str)
     
-    # --- INICIO DE LA CORRECCIÓN ---
-    # Añadimos un header para simular ser un navegador y evitar el error 403
+    # --- INICIO DE LA CORRECCIÓN FINAL ---
+    # Añadimos un set de headers completo para simular un navegador real,
+    # incluyendo el importante 'Referer'.
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'es-ES,es;q=0.9',
+        'Referer': 'https://www.smn.gob.ar/' # Le decimos al servidor que venimos de su página principal.
     }
-    # --- FIN DE LA CORRECCIÓN ---
+    # --- FIN DE LA CORRECCIÓN FINAL ---
     
     print(f"Descargando datos desde: {data_url}")
     
     try:
-        # Hacemos la petición incluyendo los headers
+        # Hacemos la petición incluyendo el set completo de headers
         response = requests.get(data_url, headers=headers)
         response.raise_for_status()
         
