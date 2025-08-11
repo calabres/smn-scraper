@@ -1,4 +1,4 @@
-name: SMN Weather Scraper
+name: SMN Scraper with Proxy
 
 on:
   schedule:
@@ -8,29 +8,27 @@ on:
 jobs:
   scrape-weather:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      # Dejamos que instale la versión por defecto de Chrome
-      - name: Set up Chrome
-        uses: browser-actions/setup-chrome@v1
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: '138'
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-
       - name: Install dependencies
-        run: |
-          pip install selenium requests undetected-chromedriver
-
+        run: pip install selenium requests undetected-chromedriver
+      
       - name: Run scraper
+        env:
+          PROXY_HOST: ${{ secrets.PROXY_HOST }}
+          PROXY_PORT: ${{ secrets.PROXY_PORT }}
+          PROXY_USER: ${{ secrets.PROXY_USER }}
+          PROXY_PASS: ${{ secrets.PROXY_PASS }}
         run: python scraper.py
-
+        
       - name: Commit and push if data changed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Actualización automática de datos del tiempo"
-          file_pattern: '*.json'
+          file_pattern: '*.csv'
