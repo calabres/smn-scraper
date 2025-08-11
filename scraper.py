@@ -1,80 +1,37 @@
 import time
-import os
-import zipfile
 import csv
 import requests
 from datetime import datetime, timedelta
 import undetected_chromedriver as uc
 import json
 
-# --- Constantes ---
+# --- Constantes del script ---
 URL_SMN = "https://www.smn.gob.ar/observaciones"
-LOCATION_ID = 4750  # ID para San Fernando
+LOCATION_ID = 4750
 API_URL_TARGET = f"https://ws1.smn.gob.ar/v1/history/weather/location/{LOCATION_ID}"
-OUTPUT_FILENAME = 'ultimo_registro_smn.csv'
+NOMBRE_ARCHIVO_CSV = 'ultimo_registro_smn.csv'
 
-def create_proxy_extension(host, port, user, password):
-    """Helper para crear una extensión de Chrome que maneja el proxy con autenticación."""
-    manifest_json = """
-    {
-        "version": "1.0.0", "manifest_version": 2, "name": "Chrome Proxy",
-        "permissions": ["proxy", "tabs", "unlimitedStorage", "storage", "<all_urls>", "webRequest", "webRequestBlocking"],
-        "background": { "scripts": ["background.js"] }, "minimum_chrome_version":"22.0.0"
-    }
-    """
-    background_js = f"""
-    var config = {{
-        mode: "fixed_servers",
-        rules: {{
-            singleProxy: {{ scheme: "http", host: "{host}", port: parseInt({port}) }},
-            bypassList: ["localhost"]
-        }}
-    }};
-    chrome.proxy.settings.set({{value: config, scope: "regular"}}, function() {{}});
-    function callbackFn(details) {{
-        return {{ authCredentials: {{ username: "{user}", password: "{password}" }} }};
-    }}
-    chrome.webRequest.onAuthRequired.addListener(callbackFn, {{urls: ["<all_urls>"]}}, ['blocking']);
-    """
-    proxy_extension_zip = 'proxy_extension.zip'
-    with zipfile.ZipFile(proxy_extension_zip, 'w') as zf:
-        zf.writestr("manifest.json", manifest_json)
-        zf.writestr("background.js", background_js)
-    return proxy_extension_zip
-
-def run_scraper_with_proxy():
+def main():
     """Función principal que ejecuta todo el proceso de scraping."""
-    
-    # 1. OBTENER TOKEN USANDO EL NAVEGADOR A TRAVÉS DEL PROXY
-    print("Iniciando el proceso de scraping a través de un proxy residencial...")
-    proxy_host = os.environ.get("PROXY_HOST")
-    proxy_port = os.environ.get("PROXY_PORT")
-    proxy_user = os.environ.get("PROXY_USER")
-    proxy_pass = os.environ.get("PROXY_PASS")
-
-    if not all([proxy_host, proxy_port, proxy_user, proxy_pass]):
-        print("❌ Error: Faltan las credenciales del proxy en los secretos de GitHub.")
-        return
-
-    proxy_extension_file = create_proxy_extension(proxy_host, proxy_port, proxy_user, proxy_pass)
+    print("Iniciando navegador en modo invisible (headless)...")
     
     options = uc.ChromeOptions()
     options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_extension(proxy_extension_file)
     options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 
+    # Forzamos la v138 para que coincida con el navegador de GitHub Actions
     driver = uc.Chrome(options=options, version_main=138)
     
     token = None
     try:
-        print("Navegando al SMN a través del proxy...")
+        print(f"Navegando a {URL_SMN}...")
         driver.get(URL_SMN)
-        print("Esperando 25 segundos para la carga completa...")
+        print("Página cargada. Esperando 25 segundos...")
         time.sleep(25)
-
-        print("Analizando los logs de red para encontrar el token...")
+        
+        print("Analizando logs de red para buscar el token...")
         logs = driver.get_log('performance')
         for log in logs:
             message = json.loads(log['message'])['message']
@@ -85,19 +42,20 @@ def run_scraper_with_proxy():
                     break
         
         if token:
-            print("✅ Token obtenido con éxito a través del proxy.")
+            print("✅ Token obtenido con éxito.")
         else:
-            print("❌ No se pudo encontrar el token en los logs de red.")
+            print("❌ No se pudo encontrar el token en los logs. Probablemente la página de seguridad bloqueó la carga.")
+            # Imprimimos el título para confirmar si nos quedamos en la página de bloqueo
+            print(f"Título final de la página: '{driver.title}'")
             return # Salimos si no hay token
     finally:
         print("Cerrando el navegador.")
         driver.quit()
 
     if not token:
-        print("\nFinalizando script. No se pudo obtener un token.")
         return
 
-    # 2. USAR EL TOKEN PARA PEDIR LOS DATOS Y GUARDAR EL CSV
+    # --- Parte 2: Usar el token para pedir los datos y guardar el CSV ---
     print("\nUsando el token para pedir los últimos registros...")
     headers = {'Authorization': f'JWT {token}'}
     params = {
@@ -112,33 +70,23 @@ def run_scraper_with_proxy():
         
         if data.get('list'):
             ultimo_registro = data['list'][-1]
-            
-            with open(OUTPUT_FILENAME, 'w', newline='', encoding='utf-8') as archivo_csv:
-                escritor_csv = csv.writer(archivo_csv)
-                encabezado = [
-                    'fecha', 'hora', 'temperatura_C', 'sensacion_termica', 'humedad', 'presion', 
-                    'visibilidad_km', 'descripcion_clima', 'viento_direccion', 
-                    'viento_velocidad_kmh', 'viento_deg'
-                ]
-                escritor_csv.writerow(encabezado)
-                
+            with open(NOMBRE_ARCHIVO_CSV, 'w', newline='', encoding='utf-8') as f:
+                escritor_csv = csv.writer(f)
+                escritor_csv.writerow(['fecha', 'hora', 'temperatura_C', 'sensacion_termica', 'humedad', 'presion', 'visibilidad_km', 'descripcion_clima', 'viento_direccion', 'viento_velocidad_kmh', 'viento_deg'])
                 fecha_hora_obj = datetime.fromisoformat(ultimo_registro['date'])
-                fila_datos = [
+                escritor_csv.writerow([
                     fecha_hora_obj.strftime('%Y-%m-%d'), fecha_hora_obj.strftime('%H:%M:%S'),
                     ultimo_registro.get('temperature'), ultimo_registro.get('feels_like'),
                     ultimo_registro.get('humidity'), ultimo_registro.get('pressure'),
                     ultimo_registro.get('visibility'), ultimo_registro.get('weather', {}).get('description'),
                     ultimo_registro.get('wind', {}).get('direction'), ultimo_registro.get('wind', {}).get('speed'),
                     ultimo_registro.get('wind', {}).get('deg')
-                ]
-                escritor_csv.writerow(fila_datos)
-
-            print(f"\n✅ ¡Éxito! Archivo '{OUTPUT_FILENAME}' creado con el último registro.")
+                ])
+            print(f"\n✅ ¡Éxito! Archivo '{NOMBRE_ARCHIVO_CSV}' creado.")
         else:
             print("❌ La respuesta de la API no contenía una lista de registros.")
-            
     except Exception as e:
-        print(f"❌ Ocurrió un error inesperado al obtener o guardar los datos: {e}")
+        print(f"❌ Ocurrió un error al obtener o guardar los datos: {e}")
 
 if __name__ == "__main__":
-    run_scraper_with_proxy()
+    main()
