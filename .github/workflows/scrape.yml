@@ -1,0 +1,44 @@
+# Nombre del flujo de trabajo que verás en la pestaña "Actions" de GitHub
+name: SMN Weather Scraper
+
+# Define cuándo se ejecutará esta acción
+on:
+  # Se ejecuta cada hora, en el minuto 0. (ej: 13:00, 14:00, etc.)
+  schedule:
+    - cron: '0 * * * *'
+  # También permite ejecutarlo manualmente desde la pestaña "Actions"
+  workflow_dispatch:
+
+# Define el trabajo que se va a realizar
+jobs:
+  scrape-weather:
+    # La máquina virtual que usará GitHub para ejecutar el código
+    runs-on: ubuntu-latest
+
+    # Los pasos que seguirá la máquina virtual
+    steps:
+      # 1. Descarga el código de tu repositorio a la máquina virtual
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # 2. Configura el entorno de Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      # 3. Instala las dependencias necesarias (Selenium y Requests)
+      - name: Install dependencies
+        run: |
+          pip install selenium requests
+
+      # 4. Ejecuta tu script de Python para hacer el scraping
+      - name: Run scraper
+        run: python scraper.py
+
+      # 5. Revisa si el archivo de datos fue modificado y lo sube al repositorio
+      - name: Commit and push if data changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Actualización automática de datos del tiempo"
+          file_pattern: '*.json' # Solo se fija en los archivos .json
