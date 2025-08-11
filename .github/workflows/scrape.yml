@@ -1,27 +1,37 @@
-name: SMN Scraper Direct Test
+name: SMN OpenData Fetcher
 
 on:
-  workflow_dispatch: # Solo se ejecutará manualmente
+  # Se ejecuta cada hora
+  schedule:
+    - cron: '0 * * * *'
+  # También permite la ejecución manual
+  workflow_dispatch:
 
 jobs:
-  scrape-weather:
+  fetch-data:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: browser-actions/setup-chrome@v1
-        with:
-          chrome-version: '138'
-      - uses: actions/setup-python@v5
+      # 1. Descarga el código de tu repositorio
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # 2. Configura Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
+
+      # 3. Instala la única dependencia necesaria: requests
       - name: Install dependencies
-        run: pip install selenium requests undetected-chromedriver
-      
-      - name: Run scraper
+        run: pip install requests
+
+      # 4. Ejecuta el script de Python
+      - name: Run data fetcher script
         run: python scraper.py
-        
+
+      # 5. Guarda el archivo .geojson si ha cambiado
       - name: Commit and push if data changed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Actualización de datos del tiempo"
-          file_pattern: '*.csv'
+          commit_message: "Actualización automática de datos del tiempo (OpenData)"
+          file_pattern: '*.geojson'
