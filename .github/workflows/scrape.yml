@@ -13,13 +13,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # --- INICIO DE LA CORRECCIÓN FINAL ---
-      # Forzamos la instalación de la versión de Chrome que coincide con el driver
-      - name: Set up Chrome v139
+      # Dejamos que instale la versión por defecto de Chrome
+      - name: Set up Chrome
         uses: browser-actions/setup-chrome@v1
-        with:
-          chrome-version: '139'
-      # --- FIN DE LA CORRECCIÓN FINAL ---
 
       - name: Set up Python
         uses: actions/setup-python@v5
