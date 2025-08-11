@@ -1,89 +1,91 @@
 import requests
-import re
 import json
+import re
 from datetime import datetime
 
-# --- Constantes ---
-DATA_URL_TEMPLATE = "https://ssl.smn.gob.ar/dpd/descarga_opendata.php?file=observaciones/tiepre{date}.txt"
-TARGET_CITY = "San Fernando"
-OUTPUT_FILENAME = 'san_fernando_weather.geojson'
+def crear_geojson_smn():
+    """
+    Se conecta al link de OpenData del SMN con la fecha actual, 
+    busca los datos de San Fernando y los guarda en un archivo GeoJSON.
+    """
+    # --- 1. CONFIGURACIÓN (con fecha dinámica) ---
+    # La fecha se insertará automáticamente
+    URL_TEMPLATE = "https://ssl.smn.gob.ar/dpd/descarga_opendata.php?file=observaciones/tiepre{date}.txt"
+    ESTACION_OBJETIVO = "San Fernando"
+    COORDENADAS = [-58.56, -34.44] # Longitud, Latitud
+    OUTPUT_FILENAME = "san_fernando_weather.geojson"
 
-def fetch_and_process_data():
-    """
-    Descarga los datos del SMN, busca San Fernando y genera un GeoJSON.
-    """
-    current_date_str = datetime.now().strftime('%Y%m%d')
-    data_url = DATA_URL_TEMPLATE.format(date=current_date_str)
+    # Genera la fecha actual en el formato YYYYMMDD que necesita la URL
+    fecha_actual_str = datetime.now().strftime('%Y%m%d')
+    url_smn = URL_TEMPLATE.format(date=fecha_actual_str)
     
-    # --- INICIO DE LA CORRECCIÓN FINAL ---
-    # Añadimos un set de headers completo para simular un navegador real,
-    # incluyendo el importante 'Referer'.
+    # Cabecera para simular ser un navegador
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'es-ES,es;q=0.9',
-        'Referer': 'https://www.smn.gob.ar/' # Le decimos al servidor que venimos de su página principal.
+        'Referer': 'https://www.smn.gob.ar/' # Añadimos Referer por si acaso
     }
-    # --- FIN DE LA CORRECCIÓN FINAL ---
-    
-    print(f"Descargando datos desde: {data_url}")
-    
+
+    # --- 2. OBTENCIÓN DE DATOS ---
+    print(f"Descargando datos desde: {url_smn}")
     try:
-        # Hacemos la petición incluyendo el set completo de headers
-        response = requests.get(data_url, headers=headers)
-        response.raise_for_status()
-        
-        text_data = response.content.decode('latin-1')
-        
-        print("Datos descargados. Buscando la línea de San Fernando...")
-        
-        for line in text_data.splitlines():
-            if line.startswith(TARGET_CITY):
-                print(f"✅ Línea encontrada: {line}")
-                
-                parts = [p.strip() for p in line.split(';')]
-                
-                fecha_str = parts[1]
-                hora_str = parts[2]
-                viento_full = parts[8]
-                
-                viento_match = re.match(r'^(.*)\s+(\d+)$', viento_full)
-                if viento_match:
-                    direccion_viento = viento_match.group(1).strip()
-                    velocidad_viento = int(viento_match.group(2))
-                else:
-                    direccion_viento = viento_full
-                    velocidad_viento = 0
-                
-                geojson_feature = {
-                    "type": "FeatureCollection",
-                    "features": [
-                        {
-                            "type": "Feature",
-                            "geometry": None,
-                            "properties": {
-                                "localidad": parts[0],
-                                "fecha": fecha_str,
-                                "hora": hora_str,
-                                "velocidad_viento_kmh": velocidad_viento,
-                                "direccion_viento": direccion_viento
-                            }
-                        }
-                    ]
-                }
-                
-                with open(OUTPUT_FILENAME, 'w', encoding='utf-8') as f:
-                    json.dump(geojson_feature, f, ensure_ascii=False, indent=4)
-                
-                print(f"Archivo '{OUTPUT_FILENAME}' creado/actualizado con éxito.")
-                return
-        
-        print(f"❌ No se encontró la línea para '{TARGET_CITY}' en el archivo de datos.")
-
+        respuesta = requests.get(url_smn, headers=headers)
+        respuesta.raise_for_status()
+        # Usamos latin-1 que es el encoding correcto para este archivo
+        datos_texto = respuesta.content.decode('latin-1')
     except requests.exceptions.RequestException as e:
-        print(f"❌ Error al descargar el archivo de datos: {e}")
-    except Exception as e:
-        print(f"❌ Ocurrió un error inesperado al procesar los datos: {e}")
+        print(f"❌ Error al conectar con la URL del SMN: {e}")
+        return
 
+    # --- 3. BÚSQUEDA Y PROCESAMIENTO ---
+    linea_encontrada = None
+    for linea in datos_texto.strip().split('\n'):
+        if linea.strip().startswith(ESTACION_OBJETIVO):
+            linea_encontrada = linea.strip()
+            print(f"✅ Línea encontrada: {linea_encontrada}")
+            break
+
+    if not linea_encontrada:
+        print(f"No se encontró la estación '{ESTACION_OBJETIVO}' en el archivo de hoy.")
+        return
+
+    # --- 4. EXTRACCIÓN Y CONSTRUCCIÓN DEL GEOJSON ---
+    try:
+        partes = [p.strip() for p in linea_encontrada.split(';')]
+        viento_texto = partes[8]
+        
+        if viento_texto.lower() == 'calma':
+            direccion_viento = 'Calma'
+            velocidad_viento_kmh = 0
+        else:
+            viento_partes = viento_texto.rsplit(' ', 1)
+            direccion_viento = viento_partes[0].strip()
+            velocidad_viento_kmh = int(viento_partes[1])
+
+        propiedades = {
+            "estacion": partes[0], "fecha": partes[1], "hora": partes[2],
+            "cielo": partes[3], "visibilidad_km": partes[4],
+            "temperatura_c": float(partes[5]), "humedad_porc": int(partes[7]),
+            "direccion_viento": direccion_viento, "velocidad_viento_kmh": velocidad_viento_kmh,
+            "presion_hpa": float(re.findall(r"[\d\.]+", partes[9])[0])
+        }
+
+        geojson_resultado = {
+            "type": "FeatureCollection",
+            "features": [{
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": COORDENADAS},
+                "properties": propiedades
+            }]
+        }
+        
+        # --- 5. GUARDAR EN ARCHIVO ---
+        with open(OUTPUT_FILENAME, 'w', encoding='utf-8') as f:
+            json.dump(geojson_resultado, f, indent=2, ensure_ascii=False)
+        print(f"✅ Archivo '{OUTPUT_FILENAME}' guardado con éxito.")
+
+    except (ValueError, IndexError) as e:
+        print(f"❌ Error al procesar los datos de la línea '{linea_encontrada}': {e}")
+
+# --- EJECUCIÓN ---
 if __name__ == "__main__":
-    fetch_and_process_data()
+    crear_geojson_smn()
